@@ -1,324 +1,397 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  serverTimestamp 
-} from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  MessageSquare, 
-  Plus, 
-  ArrowLeft, 
-  Send, 
-  AlertCircle, 
-  Lock, 
-  Eye, 
-  Image as ImageIcon, 
-  User, 
-  X,
-  Camera
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Social Full Navigation Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .active-tab { border-bottom: 4px solid #1d9bf0; color: #0f1419 !important; font-weight: 700; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .safe-pb { padding-bottom: env(safe-area-inset-bottom); }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+    </style>
+</head>
+<body class="bg-white">
+    <div id="root"></div>
 
-// --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'board-photo-app';
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-const MAX_POSTS = 1000;
+        // --- SVG Icons Helper ---
+        const Icons = {
+            Home: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+            Search: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+            Bell: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+            Mail: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+            List: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+            Bookmark: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>,
+            Users: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+            User: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+            Settings: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+            More: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
+            Heart: (p) => <svg {...p} viewBox="0 0 24 24" fill={p.active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+            Repeat: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
+            Message: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
+            ArrowLeft: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
+            Feather: (p) => <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>,
+            Check: (p) => <svg {...p} viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.71-3.998-3.818-3.998-.47 0-.92.084-1.336.25C14.818 2.415 13.51 1.5 12 1.5s-2.816.917-3.437 2.25c-.415-.165-.866-.25-1.336-.25-2.11 0-3.818 1.79-3.818 4 0 .495.083.965.238 1.4-1.272.65-2.147 2.018-2.147 3.6 0 1.495.782 2.798 1.942 3.486-.02.17-.032.34-.032.514 0 2.21 1.708 4 3.818 4 .47 0 .92-.086 1.335-.25.62 1.334 1.926 2.25 3.437 2.25 1.512 0 2.818-.916 3.437-2.25.415.163.865.248 1.336.248 2.11 0 3.818-1.79 3.818-4 0-.174-.012-.344-.033-.513 1.158-.687 1.943-1.99 1.943-3.484zm-6.616-3.334l-4.334 6.5c-.145.217-.382.334-.625.334-.143 0-.288-.04-.416-.126l-.115-.094-2.415-2.415c-.293-.293-.293-.768 0-1.06s.768-.294 1.06 0l1.77 1.767 3.825-5.74c.23-.345.696-.436 1.04-.207.346.23.44.696.21 1.04z"/></svg>
+        };
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [userName, setUserName] = useState(localStorage.getItem('board_user_name') || '名無しさん');
-  const [isEditingName, setIsEditingName] = useState(false);
-  
-  const [threads, setThreads] = useState([]);
-  const [activeThread, setActiveThread] = useState(null);
-  const [posts, setPosts] = useState([]);
-  
-  const [newThreadTitle, setNewThreadTitle] = useState('');
-  const [newPostContent, setNewPostContent] = useState('');
-  const [selectedImage, setSelectedImage] = useState(null);
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const scrollRef = useRef(null);
-  const fileInputRef = useRef(null);
+        const ME = {
+            id: 'me',
+            name: 'Gemini User',
+            handle: '@gemini_dev',
+            avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
+            bio: 'ウェブ開発とAIに情熱を注いでいます。',
+            followers: 1200,
+            following: 450,
+            verified: true
+        };
 
-  // 1. Auth & Auto-login
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+        // --- Layout Component ---
+        const App = () => {
+            const [view, setView] = useState('home'); // home, search, notifications, messages, lists, bookmarks, communities, profile, settings
+            const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // 2. Data Fetching
-  useEffect(() => {
-    if (!user) return;
-    const threadsRef = collection(db, 'artifacts', appId, 'public', 'data', 'threads');
-    return onSnapshot(threadsRef, (snap) => {
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setThreads(list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-    });
-  }, [user]);
+            const navigate = (v) => {
+                setView(v);
+                setIsDrawerOpen(false);
+                window.scrollTo(0, 0);
+            };
 
-  useEffect(() => {
-    if (!user || !activeThread) {
-      setPosts([]);
-      return;
-    }
-    const postsRef = collection(db, 'artifacts', appId, 'public', 'data', `posts_${activeThread.id}`);
-    return onSnapshot(postsRef, (snap) => {
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPosts(list.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
-    });
-  }, [user, activeThread]);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [posts]);
-
-  // Handle Image Selection & Compression
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 800; // Resize to max 800px
-
-        if (width > height && width > maxDim) {
-          height *= maxDim / width;
-          width = maxDim;
-        } else if (height > maxDim) {
-          width *= maxDim / height;
-          height = maxDim;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        // Compress to JPEG for smaller storage
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        setSelectedImage(dataUrl);
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const saveName = () => {
-    localStorage.setItem('board_user_name', userName);
-    setIsEditingName(false);
-  };
-
-  const createThread = async (e) => {
-    e.preventDefault();
-    if (!newThreadTitle.trim()) return;
-    try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'threads'), {
-        title: newThreadTitle,
-        creator: user.uid,
-        createdAt: serverTimestamp()
-      });
-      setNewThreadTitle('');
-    } catch (err) { console.error(err); }
-  };
-
-  const createPost = async (e) => {
-    e.preventDefault();
-    if ((!newPostContent.trim() && !selectedImage) || posts.length >= MAX_POSTS || isSending) return;
-
-    setIsSending(true);
-    try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `posts_${activeThread.id}`), {
-        content: newPostContent,
-        image: selectedImage,
-        authorId: user.uid,
-        authorName: userName,
-        createdAt: serverTimestamp()
-      });
-      setNewPostContent('');
-      setSelectedImage(null);
-    } catch (err) { console.error(err); }
-    setIsSending(false);
-  };
-
-  if (isLoading) return <div className="flex items-center justify-center min-h-screen">読み込み中...</div>;
-
-  const remaining = MAX_POSTS - posts.length;
-  const isClosed = remaining <= 0;
-
-  return (
-    <div className="min-h-screen bg-gray-100 text-gray-900 font-sans pb-10">
-      {/* Header */}
-      <nav className="bg-white border-b sticky top-0 z-50 shadow-sm px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveThread(null)}>
-            <div className="bg-indigo-600 p-2 rounded-lg text-white">
-              <MessageSquare size={20} />
-            </div>
-            <h1 className="font-bold text-xl">PhotoBoard</h1>
-          </div>
-          
-          <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-full border">
-            <User size={14} className="text-gray-400" />
-            {isEditingName ? (
-              <div className="flex items-center gap-1">
-                <input 
-                  className="bg-transparent border-b border-indigo-400 outline-none text-xs w-24"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  autoFocus
-                />
-                <button onClick={saveName} className="text-[10px] text-indigo-600 font-bold uppercase">Save</button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium">{userName}</span>
-                <button onClick={() => setIsEditingName(true)} className="text-[10px] text-gray-400 hover:text-indigo-600">編集</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-4xl mx-auto p-4">
-        {!activeThread ? (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border">
-              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">スレッドを立てる</h2>
-              <form onSubmit={createThread} className="flex gap-2">
-                <input
-                  className="flex-1 bg-gray-50 border rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  placeholder="タイトル..."
-                  value={newThreadTitle}
-                  onChange={(e) => setNewThreadTitle(e.target.value)}
-                />
-                <button className="bg-indigo-600 text-white px-6 rounded-xl font-bold shadow-lg shadow-indigo-100">作成</button>
-              </form>
-            </div>
-
-            <div className="grid gap-3">
-              {threads.map(t => (
-                <button key={t.id} onClick={() => setActiveThread(t)} className="bg-white p-5 rounded-2xl border shadow-sm hover:border-indigo-400 text-left transition-all flex justify-between items-center group">
-                  <span className="font-bold text-lg group-hover:text-indigo-600">{t.title}</span>
-                  <Plus size={20} className="text-gray-300 group-hover:text-indigo-600" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="animate-in slide-in-from-right-4 duration-300">
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={() => setActiveThread(null)} className="flex items-center gap-1 text-gray-500 font-bold">
-                <ArrowLeft size={18} /> 戻る
-              </button>
-              <div className={`px-3 py-1 rounded-full text-xs font-bold border ${isClosed ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600'}`}>
-                {isClosed ? '閉鎖済み' : `残：${remaining}件`}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-xl border overflow-hidden flex flex-col">
-              <div className="p-5 border-b bg-gray-50/50">
-                <h2 className="text-xl font-black">{activeThread.title}</h2>
-              </div>
-
-              <div ref={scrollRef} className="h-[500px] overflow-y-auto p-4 space-y-6 bg-gray-50/30">
-                {posts.map((p, i) => (
-                  <div key={p.id} className={`flex flex-col ${p.authorId === user.uid ? 'items-end' : 'items-start'}`}>
-                    <div className="flex gap-2 mb-1 px-1 text-[10px] font-bold text-gray-400">
-                      <span>{p.authorName || '名無し'}</span>
-                      <span>(ID:{p.authorId?.substring(0, 8)})</span>
-                      <span>#{i + 1}</span>
-                    </div>
-                    <div className={`max-w-[85%] p-3 rounded-2xl shadow-sm border ${p.authorId === user.uid ? 'bg-indigo-600 text-white rounded-tr-none border-indigo-500' : 'bg-white rounded-tl-none border-gray-100'}`}>
-                      {p.image && <img src={p.image} alt="uploaded" className="rounded-lg mb-2 max-h-64 object-contain bg-black/5" />}
-                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{p.content}</p>
-                      <div className="text-[8px] mt-1 text-right opacity-50">{p.createdAt ? new Date(p.createdAt.seconds * 1000).toLocaleString() : '...'}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-4 bg-white border-t">
-                {!isClosed ? (
-                  <form onSubmit={createPost} className="space-y-3">
-                    {selectedImage && (
-                      <div className="relative inline-block">
-                        <img src={selectedImage} className="h-24 w-24 object-cover rounded-lg border shadow-sm" />
-                        <button 
-                          type="button" 
-                          onClick={() => setSelectedImage(null)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
+            const PageHeader = ({ title, showBack = false }) => (
+                <div className="sticky top-0 bg-white/80 backdrop-blur-md z-20 flex items-center px-4 py-3 border-b border-gray-100">
+                    {showBack ? (
+                        <button onClick={() => navigate('home')} className="p-2 hover:bg-gray-100 rounded-full mr-4"><Icons.ArrowLeft size={20}/></button>
+                    ) : (
+                        <div onClick={() => setIsDrawerOpen(true)} className="sm:hidden mr-4 cursor-pointer">
+                            <img src={ME.avatar} className="w-8 h-8 rounded-full"/>
+                        </div>
                     )}
-                    <div className="flex gap-2 items-end">
-                      <button 
-                        type="button" 
-                        onClick={() => fileInputRef.current.click()}
-                        className="p-3 bg-gray-100 text-gray-500 rounded-xl hover:bg-gray-200 transition-colors"
-                      >
-                        <Camera size={24} />
-                      </button>
-                      <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageChange} />
-                      <textarea
-                        className="flex-1 bg-gray-50 border rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-12"
-                        placeholder="メッセージ..."
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                      />
-                      <button 
-                        disabled={isSending || (!newPostContent.trim() && !selectedImage)}
-                        className="bg-indigo-600 text-white p-3 rounded-xl shadow-lg shadow-indigo-100 disabled:opacity-50"
-                      >
-                        <Send size={24} />
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="p-4 text-center text-gray-400 text-sm font-bold flex items-center justify-center gap-2">
-                    <Lock size={16} /> このスレッドは閉鎖されました
-                  </div>
-                )}
-              </div>
+                    <h1 className="font-bold text-xl">{title}</h1>
+                </div>
+            );
+
+            const renderView = () => {
+                switch(view) {
+                    case 'home': return <HomeView />;
+                    case 'search': return <SearchView />;
+                    case 'notifications': return <NotificationsView />;
+                    case 'messages': return <MessagesView />;
+                    case 'lists': return <ListsView />;
+                    case 'bookmarks': return <BookmarksView />;
+                    case 'communities': return <CommunitiesView />;
+                    case 'profile': return <ProfileView user={ME} />;
+                    case 'settings': return <SettingsView />;
+                    default: return <HomeView />;
+                }
+            };
+
+            return (
+                <div className="flex justify-center min-h-screen max-w-7xl mx-auto">
+                    {/* PC Sidebar */}
+                    <aside className="hidden sm:flex flex-col w-20 xl:w-64 h-screen sticky top-0 px-2 xl:px-4 py-2 border-r border-gray-100">
+                        <div className="p-3 text-blue-500 w-min hover:bg-blue-50 rounded-full cursor-pointer mb-2">
+                            <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current"><path d="M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z"></path></svg>
+                        </div>
+                        <nav className="flex-1 space-y-1">
+                            <SidebarItem icon={Icons.Home} text="ホーム" active={view==='home'} onClick={()=>navigate('home')}/>
+                            <SidebarItem icon={Icons.Search} text="話題を検索" active={view==='search'} onClick={()=>navigate('search')}/>
+                            <SidebarItem icon={Icons.Bell} text="通知" active={view==='notifications'} onClick={()=>navigate('notifications')}/>
+                            <SidebarItem icon={Icons.Mail} text="メッセージ" active={view==='messages'} onClick={()=>navigate('messages')}/>
+                            <SidebarItem icon={Icons.List} text="リスト" active={view==='lists'} onClick={()=>navigate('lists')}/>
+                            <SidebarItem icon={Icons.Bookmark} text="ブックマーク" active={view==='bookmarks'} onClick={()=>navigate('bookmarks')}/>
+                            <SidebarItem icon={Icons.Users} text="コミュニティ" active={view==='communities'} onClick={()=>navigate('communities')}/>
+                            <SidebarItem icon={Icons.User} text="プロフィール" active={view==='profile'} onClick={()=>navigate('profile')}/>
+                            <SidebarItem icon={Icons.Settings} text="設定" active={view==='settings'} onClick={()=>navigate('settings')}/>
+                        </nav>
+                        <div className="p-3 mb-4 flex items-center gap-3 hover:bg-gray-100 rounded-full cursor-pointer transition">
+                            <img src={ME.avatar} className="w-10 h-10 rounded-full"/>
+                            <div className="hidden xl:block overflow-hidden">
+                                <div className="font-bold text-sm truncate">{ME.name}</div>
+                                <div className="text-gray-500 text-sm truncate">{ME.handle}</div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main className="flex-1 w-full max-w-[600px] border-r border-gray-100 min-h-screen pb-20 sm:pb-0">
+                        {renderView()}
+                    </main>
+
+                    {/* PC Right Rail */}
+                    <aside className="hidden lg:block w-80 xl:w-96 pl-8 pr-4 py-2 space-y-4">
+                        <div className="sticky top-0 bg-white py-2 z-10">
+                            <div className="relative group">
+                                <div className="absolute left-4 top-3 text-gray-500"><Icons.Search size={18}/></div>
+                                <input placeholder="検索" className="w-full bg-gray-100 rounded-full py-2.5 pl-12 pr-4 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition"/>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 rounded-2xl p-4">
+                            <h2 className="font-black text-xl mb-4">いまどうしてる？</h2>
+                            <TrendItem category="日本のトレンド" topic="React 19" posts="1.2万件"/>
+                            <TrendItem category="テクノロジー" topic="TailwindCSS" posts="5,600件"/>
+                            <TrendItem category="ニュース" topic="Gemini 2.5" posts="2.8万件"/>
+                        </div>
+                    </aside>
+
+                    {/* Mobile Navigation */}
+                    <nav className="sm:hidden fixed bottom-0 w-full bg-white border-t border-gray-100 flex justify-around py-2 z-30 safe-pb">
+                        <button onClick={()=>navigate('home')} className={view==='home'?'text-black':'text-gray-500'}><Icons.Home size={26} strokeWidth={view==='home'?3:2}/></button>
+                        <button onClick={()=>navigate('search')} className={view==='search'?'text-black':'text-gray-500'}><Icons.Search size={26} strokeWidth={view==='search'?3:2}/></button>
+                        <button onClick={()=>navigate('notifications')} className={view==='notifications'?'text-black':'text-gray-500'}><Icons.Bell size={26} strokeWidth={view==='notifications'?3:2}/></button>
+                        <button onClick={()=>navigate('messages')} className={view==='messages'?'text-black':'text-gray-500'}><Icons.Mail size={26} strokeWidth={view==='messages'?3:2}/></button>
+                    </nav>
+
+                    {/* Mobile Drawer */}
+                    {isDrawerOpen && (
+                        <div className="fixed inset-0 z-[100] flex">
+                            <div className="fixed inset-0 bg-black/40" onClick={()=>setIsDrawerOpen(false)}></div>
+                            <div className="relative w-72 bg-white h-full animate-slide-in p-4 flex flex-col">
+                                <div className="flex justify-between items-start mb-4">
+                                    <img src={ME.avatar} className="w-10 h-10 rounded-full"/>
+                                    <button className="border border-gray-300 rounded-full p-1" onClick={()=>setIsDrawerOpen(false)}><Icons.ArrowLeft size={16}/></button>
+                                </div>
+                                <div className="font-bold text-lg leading-tight">{ME.name}</div>
+                                <div className="text-gray-500 mb-4">{ME.handle}</div>
+                                <div className="flex gap-4 text-sm mb-6">
+                                    <span><b>{ME.following}</b> フォロー中</span>
+                                    <span><b>{ME.followers}</b> フォロワー</span>
+                                </div>
+                                <nav className="space-y-4 font-bold text-xl overflow-y-auto">
+                                    <DrawerItem icon={Icons.User} text="プロフィール" onClick={()=>navigate('profile')}/>
+                                    <DrawerItem icon={Icons.List} text="リスト" onClick={()=>navigate('lists')}/>
+                                    <DrawerItem icon={Icons.Bookmark} text="ブックマーク" onClick={()=>navigate('bookmarks')}/>
+                                    <DrawerItem icon={Icons.Users} text="コミュニティ" onClick={()=>navigate('communities')}/>
+                                    <div className="border-t border-gray-100 pt-4">
+                                        <DrawerItem icon={Icons.Settings} text="設定とサポート" onClick={()=>navigate('settings')}/>
+                                    </div>
+                                </nav>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Sub-Components ---
+        const SidebarItem = ({ icon: Icon, text, active, onClick }) => (
+            <div onClick={onClick} className="flex items-center gap-4 p-3 rounded-full cursor-pointer hover:bg-gray-100 transition w-max xl:w-full">
+                <Icon size={26} strokeWidth={active?3:2}/>
+                <span className={`text-xl hidden xl:block ${active?'font-bold':'font-normal'}`}>{text}</span>
             </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+        );
+
+        const DrawerItem = ({ icon: Icon, text, onClick }) => (
+            <div onClick={onClick} className="flex items-center gap-4 cursor-pointer">
+                <Icon size={24}/>
+                <span>{text}</span>
+            </div>
+        );
+
+        const TrendItem = ({ category, topic, posts }) => (
+            <div className="py-3 hover:bg-gray-200/50 cursor-pointer transition px-2 rounded-lg">
+                <div className="text-xs text-gray-500">{category}</div>
+                <div className="font-bold">{topic}</div>
+                <div className="text-xs text-gray-500">{posts}件のポスト</div>
+            </div>
+        );
+
+        // --- Views ---
+
+        const HomeView = () => (
+            <div className="divide-y divide-gray-100">
+                <div className="sticky top-0 bg-white/80 backdrop-blur-md z-10 flex border-b border-gray-100">
+                    <div className="flex-1 text-center py-4 font-bold border-b-4 border-blue-500">おすすめ</div>
+                    <div className="flex-1 text-center py-4 font-medium text-gray-500">フォロー中</div>
+                </div>
+                <div className="p-4 flex gap-3">
+                    <img src={ME.avatar} className="w-10 h-10 rounded-full"/>
+                    <div className="flex-1">
+                        <textarea placeholder="いまどうしてる？" className="w-full text-xl outline-none resize-none h-12 mt-2"></textarea>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-2">
+                            <div className="flex gap-2 text-blue-500"><Icons.Image size={20}/><Icons.List size={20}/></div>
+                            <button className="bg-blue-500 text-white px-5 py-2 rounded-full font-bold">ポストする</button>
+                        </div>
+                    </div>
+                </div>
+                <Tweet user={{name:'Tech Insider', handle:'@tech', avatar:'https://api.dicebear.com/7.x/identicon/svg?seed=t'}} content="React 19 is coming! 新機能が楽しみですね。" time="2時間"/>
+                <Tweet user={{name:'Foodie', handle:'@food', avatar:'https://api.dicebear.com/7.x/identicon/svg?seed=f'}} content="今日のランチは最高でした 🍜" time="4時間"/>
+            </div>
+        );
+
+        const SearchView = () => (
+            <div className="p-4 space-y-4">
+                <div className="relative">
+                    <Icons.Search className="absolute left-4 top-3 text-gray-500" size={18}/>
+                    <input className="w-full bg-gray-100 rounded-full py-2 pl-12 pr-4 outline-none border border-transparent focus:border-blue-500 focus:bg-white" placeholder="検索"/>
+                </div>
+                <h2 className="font-bold text-xl">おすすめのトレンド</h2>
+                <TrendItem category="テクノロジー" topic="#AI" posts="4.5万件"/>
+                <TrendItem category="日本" topic="祝日" posts="1.2万件"/>
+            </div>
+        );
+
+        const NotificationsView = () => (
+            <div className="divide-y divide-gray-100">
+                <div className="flex border-b border-gray-100">
+                    <div className="flex-1 text-center py-3 border-b-4 border-blue-500 font-bold">すべて</div>
+                    <div className="flex-1 text-center py-3 text-gray-500">確認済み</div>
+                    <div className="flex-1 text-center py-3 text-gray-500">返信</div>
+                </div>
+                {[1,2,3].map(i => (
+                    <div key={i} className="p-4 flex gap-3 hover:bg-gray-50 transition">
+                        <Icons.Heart className="text-pink-600 fill-current" size={24}/>
+                        <div>
+                            <div className="flex -space-x-2 mb-2">
+                                <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${i}`} className="w-8 h-8 rounded-full border-2 border-white"/>
+                            </div>
+                            <div className="text-sm"><span className="font-bold">ユーザー{i}</span> さんがあなたのポストをいいねしました</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+
+        const MessagesView = () => (
+            <div className="divide-y divide-gray-100">
+                <div className="p-4 flex items-center justify-between">
+                    <h2 className="font-bold text-lg">メッセージ</h2>
+                    <Icons.Settings size={20}/>
+                </div>
+                {[1,2].map(i => (
+                    <div key={i} className="p-4 flex gap-3 hover:bg-gray-50 cursor-pointer">
+                        <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=msg${i}`} className="w-12 h-12 rounded-full"/>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex justify-between font-bold text-sm">
+                                <span>ユーザー{i}</span>
+                                <span className="font-normal text-gray-500 text-xs">1月{i}日</span>
+                            </div>
+                            <div className="text-gray-500 text-sm truncate">こんにちは！最近はどうですか？</div>
+                        </div>
+                    </div>
+                ))}
+                <div className="p-8 text-center text-gray-500 text-sm">メッセージはまだありません</div>
+            </div>
+        );
+
+        const ListsView = () => (
+            <div className="p-4">
+                <h3 className="font-bold text-xl mb-4">新しいリストを発見</h3>
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 border rounded-xl hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center text-blue-500"><Icons.List/></div>
+                            <div>
+                                <div className="font-bold text-sm">テクノロジーニュース</div>
+                                <div className="text-xs text-gray-500">メンバー45人</div>
+                            </div>
+                        </div>
+                        <button className="bg-black text-white px-4 py-1.5 rounded-full text-sm font-bold">保存</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const BookmarksView = () => (
+            <div className="p-8 text-center max-w-xs mx-auto">
+                <div className="font-black text-3xl mb-2">後で読むために保存</div>
+                <p className="text-gray-500 text-sm mb-6">ブックマークしたポストは、他のユーザーから見ることはできません。自分だけが確認できます。</p>
+                <img src="https://abs.twimg.com/sticky/illustrations/empty-states/book-in-bird-cage-800x400.v1.png" className="w-full opacity-50"/>
+            </div>
+        );
+
+        const CommunitiesView = () => (
+            <div className="p-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 border rounded-2xl text-center space-y-2 hover:bg-gray-50 cursor-pointer">
+                        <div className="w-12 h-12 bg-green-100 rounded-full mx-auto flex items-center justify-center text-green-600"><Icons.Users/></div>
+                        <div className="font-bold">アニメファン</div>
+                        <div className="text-xs text-gray-500">1.2万人</div>
+                    </div>
+                    <div className="p-4 border rounded-2xl text-center space-y-2 hover:bg-gray-50 cursor-pointer">
+                        <div className="w-12 h-12 bg-orange-100 rounded-full mx-auto flex items-center justify-center text-orange-600"><Icons.Feather/></div>
+                        <div className="font-bold">Webデザイン</div>
+                        <div className="text-xs text-gray-500">8,500人</div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const ProfileView = ({ user }) => (
+            <div>
+                <div className="h-32 bg-gray-200"></div>
+                <div className="px-4 pb-4">
+                    <div className="flex justify-between items-end -mt-12 mb-2">
+                        <img src={user.avatar} className="w-24 h-24 rounded-full border-4 border-white bg-white shadow-sm"/>
+                        <button className="border border-gray-300 rounded-full px-4 py-1.5 font-bold text-sm hover:bg-gray-100">プロフィールを編集</button>
+                    </div>
+                    <div className="font-bold text-xl flex items-center gap-1">
+                        {user.name} 
+                        {user.verified && <span className="text-blue-500"><Icons.Check size={16}/></span>}
+                    </div>
+                    <div className="text-gray-500 text-sm mb-3">{user.handle}</div>
+                    <div className="text-[15px] mb-3">{user.bio}</div>
+                    <div className="flex gap-4 text-sm">
+                        <span><b className="text-black">{user.following}</b> <span className="text-gray-500">フォロー中</span></span>
+                        <span><b className="text-black">{user.followers}</b> <span className="text-gray-500">フォロワー</span></span>
+                    </div>
+                </div>
+                <div className="flex border-b border-gray-100 mt-2">
+                    <div className="flex-1 text-center py-3 border-b-4 border-blue-500 font-bold">ポスト</div>
+                    <div className="flex-1 text-center py-3 text-gray-500">返信</div>
+                    <div className="flex-1 text-center py-3 text-gray-500">メディア</div>
+                    <div className="flex-1 text-center py-3 text-gray-500">いいね</div>
+                </div>
+                <div className="p-8 text-center text-gray-500 text-sm italic">まだポストがありません。</div>
+            </div>
+        );
+
+        const SettingsView = () => (
+            <div className="divide-y divide-gray-100">
+                <SettingsLink text="アカウント" desc="アカウント情報の確認、データのダウンロードなど"/>
+                <SettingsLink text="セキュリティとアカウントアクセス" desc="2要素認証、連携アプリの管理"/>
+                <SettingsLink text="収益化" desc="サブスクリプション、チップなど"/>
+                <SettingsLink text="プライバシーと安全" desc="ポストの非公開設定、ブロック済みアカウント"/>
+                <SettingsLink text="アクセシビリティ、表示、言語" desc="ダークモード、フォントサイズ"/>
+            </div>
+        );
+
+        const SettingsLink = ({ text, desc }) => (
+            <div className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center transition">
+                <div className="min-w-0 pr-4">
+                    <div className="font-medium">{text}</div>
+                    <div className="text-gray-500 text-xs truncate">{desc}</div>
+                </div>
+                <div className="text-gray-400 rotate-180"><Icons.ArrowLeft size={16}/></div>
+            </div>
+        );
+
+        const Tweet = ({ user, content, time }) => (
+            <div className="p-4 flex gap-3 hover:bg-gray-50/50 transition cursor-pointer">
+                <img src={user.avatar} className="w-10 h-10 rounded-full"/>
+                <div className="flex-1">
+                    <div className="flex gap-1 items-center text-sm truncate">
+                        <span className="font-bold text-black">{user.name}</span>
+                        <span className="text-gray-500">{user.handle} · {time}</span>
+                    </div>
+                    <div className="text-[15px] mt-1 text-gray-900 leading-normal">{content}</div>
+                    <div className="flex justify-between mt-3 text-gray-500 max-w-sm">
+                        <Icons.Message size={18}/><Icons.Repeat size={18}/><Icons.Heart size={18}/><Icons.More size={18}/>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
 
